@@ -32,6 +32,17 @@
   .blink{animation:bl 1.1s steps(1) infinite}
   @keyframes bl{50%{opacity:0}}
 
+  .nav{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+  .navb{border:1px solid var(--g3);width:26px;height:22px;display:flex;align-items:center;justify-content:center;
+    font-size:9px;color:var(--b);transition:.1s;flex:0 0 auto}
+  .navb:active{background:var(--g);border-color:var(--g);color:var(--bg)}
+  .navb[disabled]{color:var(--g3);border-color:var(--g3);opacity:.45}
+  .backnote{display:none;margin:0 0 10px;padding:6px 8px;border:1px solid var(--amb);
+    font-size:8px;letter-spacing:.14em;color:var(--amb)}
+  .backnote.show{display:block}
+  .backnote button{color:var(--b);font-size:8px;letter-spacing:.14em;text-decoration:underline}
+  body.past .bar{border-bottom-color:var(--amb)}
+  body.past .bar .st{color:var(--amb)}
   .cap{font-size:8.5px;letter-spacing:.2em;color:var(--g2);margin:0 0 6px}
   .cap::before{content:'> '}
 
@@ -125,8 +136,13 @@
 
 <div class="bar">
   <span class="id">GRI//DIRECTIVE</span>
-  <span class="st" id="stamp">&#9608;</span>
+  <span class="nav">
+    <button class="navb" id="prevDay" aria-label="Previous day">&#9664;</button>
+    <span class="st" id="stamp">&#9608;</span>
+    <button class="navb" id="nextDay" aria-label="Next day">&#9654;</button>
+  </span>
 </div>
+<p class="backnote" id="backnote">&#9679; EDITING PAST RECORD &mdash; <button id="toToday">RETURN TO NOW</button></p>
 
 <p class="cap">SELECT NODE</p>
 <div class="nodes" id="nodes"></div>
@@ -157,7 +173,7 @@
 <button class="go" id="commit" disabled>NO NODE SELECTED</button>
 
 <div class="log">
-  <p class="cap">SESSION LOG</p>
+  <p class="cap" id="logCap">SESSION LOG</p>
   <div id="logList"></div>
   <p class="none" id="logNone">NO RECORDS WRITTEN</p>
 </div>
@@ -219,13 +235,19 @@
   }
 
   var today=dkey(new Date());
-  (function stampDate(){
-    var d=new Date();
-    var days=['SUN','MON','TUE','WED','THU','FRI','SAT'];
-    var mons=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  var viewKey=today;
+  function parseKey(k){ var p=k.split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+  var DAYS=['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  var MONS=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  function stampDate(){
+    var d=parseKey(viewKey), isNow=(viewKey===today);
     document.getElementById('stamp').innerHTML=
-      days[d.getDay()]+' '+pad(d.getDate())+' '+mons[d.getMonth()]+' <span class="blink">\u2588</span>';
-  })();
+      DAYS[d.getDay()]+' '+pad(d.getDate())+' '+MONS[d.getMonth()]+
+      (isNow?' <span class="blink">\u2588</span>':'');
+    document.body.classList.toggle('past',!isNow);
+    document.getElementById('backnote').classList.toggle('show',!isNow);
+    document.getElementById('nextDay').disabled=isNow;
+  }
 
   var toastEl=document.getElementById('toast'), tTimer=null;
   function toast(m){
@@ -325,7 +347,7 @@
 
   // ---- session log ----
   var logList=document.getElementById('logList'), logNone=document.getElementById('logNone');
-  function todays(){ return store.entries.filter(function(e){ return e.date===today; }); }
+  function todays(){ return store.entries.filter(function(e){ return e.date===viewKey; }); }
   function paintLog(){
     logList.innerHTML='';
     var rows=todays();
@@ -355,7 +377,7 @@
     if(!node || (hrs<=0 && imgs<=0)) return;
     var now=new Date();
     store.entries.push({
-      date:today,
+      date:viewKey,
       time:pad(now.getHours())+':'+pad(now.getMinutes()),
       node:node.toUpperCase(),
       project:node,
@@ -417,7 +439,7 @@
     return h+'</table>';
   }
   function monthHTML(){
-    var ym=today.slice(0,7);
+    var ym=viewKey.slice(0,7);
     var rows=store.entries.filter(function(e){ return e.date.slice(0,7)===ym; });
     if(!rows.length) return '<p class="tip">NOTHING LOGGED THIS MONTH</p>';
     var by={};
@@ -464,10 +486,28 @@
     else fb();
   });
 
-  setInterval(function(){ if(dkey(new Date())!==today) location.reload(); },60000);
+  var BACK_LIMIT=(function(){ var d=new Date(); d.setDate(d.getDate()-60); return dkey(d); })();
+  function goTo(k){
+    if(k<BACK_LIMIT) k=BACK_LIMIT;
+    if(k>today) k=today;
+    viewKey=k;
+    stampDate();
+    document.getElementById('logCap').textContent=
+      viewKey===today ? 'SESSION LOG' : 'LOG \u00B7 '+viewKey;
+    paintLog();
+  }
+  function shiftDay(n){
+    var d=parseKey(viewKey); d.setDate(d.getDate()+n);
+    goTo(dkey(d)); buzz();
+  }
+  document.getElementById('prevDay').addEventListener('click',function(){ shiftDay(-1); });
+  document.getElementById('nextDay').addEventListener('click',function(){ shiftDay(1); });
+  document.getElementById('toToday').addEventListener('click',function(){ goTo(today); buzz(); });
+
+  setInterval(function(){ if(dkey(new Date())!==today && viewKey===today) location.reload(); },60000);
   document.addEventListener('gesturestart',function(e){ e.preventDefault(); });
 
-  paintCells(); paintCount(); sync(); paintLog();
+  stampDate(); paintCells(); paintCount(); sync(); paintLog();
 })();
 </script>
 </body>
